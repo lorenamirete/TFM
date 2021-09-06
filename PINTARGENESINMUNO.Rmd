@@ -1,0 +1,435 @@
+
+
+# Analysis of  patients vs controls
+
+```{r message= FALSE, warning=FALSE, echo=FALSE}
+#install.packages("ggplot2")
+library(ggplot2)
+
+#install.packages("Rtsne", dependencies = TRUE, INSTALL_opts = '--no-lock')
+library(Rtsne)
+
+#install.packages('umap')
+library(umap)
+
+
+
+
+plot_PCA_tSNE_UMAP <- function(filename, title, plex) {
+  
+  
+  
+  # Load the data
+  df = read.csv(filename)
+  
+  # Choose the data
+  #df1 = df[df$RESULT == "MONO",]
+  #df2 = df[df$RESULT == 'TACI',]
+  #df = rbind(df1, df2)
+  
+  # Silence data
+  # df$DOCK8<-NULL
+  # df$SPINK5<-NULL
+  # load df and erase any gen with too much influence
+  
+
+  # Reverse the data rows
+  # Controls locate at the end of the dataframe and at the top in the plot
+  #df = df[rev(rownames(df)),] 
+  
+  # Take data rows randomly
+  #df = df[sample(nrow(df)),]
+  
+  # Take a look at the data
+  # head(df[1:3,1:10])
+
+  # Extract the training data 
+  # Filter out individual_id and class columns
+  stop = dim(df)[2] - 4 # We [stop] before de class, genotype and fenotype columns and after de individual [1] column.
+  train = df[, 2:stop]
+  
+  var <- apply(train, 2, var)
+  #print(var)
+
+  
+  
+  # Do the PCA
+  pca <- prcomp(train, center = TRUE, scale = TRUE)
+
+  
+  # Loadings of the PCs (1, 2, 3 and 4). Give us the most influential real variables of each PC
+  loadings1 <- sort(abs(pca$rotation[,1]), decreasing = TRUE)
+  peso1 <- loadings1[1:5]
+  print(peso1)
+  
+  loadings2 <- sort(abs(pca$rotation[,2]), decreasing = TRUE)
+  peso2 <- loadings2[1:5]
+  print(peso2)
+  
+  loadings3 <- sort(abs(pca$rotation[,3]), decreasing = TRUE)
+  peso3 <- loadings3[1:5]
+  print(peso3)
+  
+  loadings4 <- sort(abs(pca$rotation[,4]), decreasing = TRUE)
+  peso4 <- loadings4[1:5]
+  print(peso4)
+  
+  
+  # Plot the PCA variance
+  plot(pca, type='l') #l for lines, p for points
+  #summary(pca)
+  
+  
+  
+  # Contribution of the original variables (with factoextra)
+  
+  #fviz_pca_biplot(pca, repel = F, col.var = "black", col.ind = "gray")
+  #fviz_contrib(pca, choice = "var", axes = 1, top = 10)
+  #fviz_contrib(pca, choice = "var", axes = 2, top = 10)
+  #fviz_contrib(pca, choice = "var", axes = 3, top = 10)
+  
+  
+  # Plot the PCA
+  pca_plot <- as.data.frame(pca$x)
+  pca_plot$group <- df$RESULT
+  p <- ggplot(pca_plot,aes(x=PC1,y=PC2,color=group)) + geom_point(alpha=0.8) + ggtitle(paste('PCA', title, sep=' ')) + theme(panel.background = element_rect(fill = 'white', colour = 'black')) # geom_point(alpha=0.8) for transparency
+  print(p)
+  
+  b <- biplot(pca, scale = 0, cex=0.8)
+  print(b)
+  
+
+  
+  
+  
+  # Do the tSNE
+  set.seed(1) # seed for can repeat the process
+  
+  tsne <- Rtsne(train, check_duplicates=FALSE, perplexity = plex)
+    
+  #tsne5 <- Rtsne(train, check_duplicates=FALSE, perplexity = 5)
+  #tsne50 <- Rtsne(train, check_duplicates=FALSE, perplexity = 50)
+  
+  
+  # Plot the tSNE
+  ## getting the two dimension matrix
+  tsne_data <- as.data.frame(tsne$Y)
+  tsne_data$class = df$RESULT
+  p <- ggplot(tsne_data,aes(x=V1,y=V2,color=class)) + geom_point(alpha=0.8) + ggtitle(paste('tSNE', title, sep=' ')) + theme(panel.background = element_rect(fill = 'white', colour = 'black')) # geom_point(alpha=0.8) for transparency
+  print(p)
+  #return (tsne_data)
+  
+  #tsne5_data <- as.data.frame(tsne5$Y)
+  #tsne5_data$class = df$RESULT
+  #p5 <- ggplot(tsne5_data,aes(x=V1,y=V2,color=class)) + geom_point(alpha=0.8) + ggtitle(paste('tSNE5', title, sep=' ')) + theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+  #print(p5)#
+  #return (tsne5_data)
+  
+
+  # tsne50_data <- as.data.frame(tsne50$Y)
+  # tsne50_data$class = df$RESULT
+  # p50 <- ggplot(tsne50_data,aes(x=V1,y=V2,color=class)) + geom_point(alpha=0.8) + ggtitle(paste('tSNE50', title, sep=' ')) + theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+  # print(p50)
+  # return (tsne50_data)
+  
+  
+  
+  
+  
+  
+  #Do the UMAP
+  set.seed(18)
+  umap_result = umap(train)
+  Tipo = df$RESULT
+  
+  #Plot the UMAP
+  umap_plot <- as.data.frame(umap_result$layout)
+  p <- ggplot(umap_plot, aes(x = V1, y = V2, color = Tipo)) + geom_point(alpha=0.8) + ggtitle(paste('UMAP', title, sep=' ')) + theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+  print(p)
+  
+  
+  
+  
+  
+  }
+
+count_variants_genes <- function(variants_patient, minim, maxim, step) {
+  for (i in seq(minim, maxim, step)) { # this create a seQuence, from min to max by step. groups always <= 5
+    if (i <= variants_patient & variants_patient < i+step) {
+      return(i)
+    }
+  }
+}
+
+
+plot_PCA_tSNE_UMAP_gene <- function(filename, title, gene, plex) {
+  # Load the data
+  df = read.csv(filename)
+  
+  #Choose the data
+  #df1 = df[df$RESULT == "MONO",]
+  #df2 = df[df$RESULT == 'TACI',]
+  #df = rbind(df1, df2)
+  
+  # df$DOCK8<-NULL
+  # df$SPINK5<-NULL
+  # head(df)
+  
+  # Reverse the data rows
+  # Controls locate at the end of the dataframe and at the top in the plot
+  # df = df[rev(rownames(df)),]
+  
+  # Create new column with 5 groups of variants per gene
+  minim = min(df[,gene])
+  maxim = max(df[,gene])
+  if (maxim <= 5) {
+    step = 1
+  } else {
+    range = maxim - minim
+    step = round(range / 5, digits=0) # step for equitable groups when the gene has more than 5 variants
+  }
+  df$RESULT <- sapply(df[,gene], count_variants_genes, minim, maxim, step)
+  
+  
+  
+  # Take a look at the data
+  #print(head(df))
+  
+  # Extract the training data 
+  # Filter out individual_id and class columns
+  stop = dim(df)[2] - 4
+  train = df[, 2:stop]
+  
+  
+  
+  
+  
+  # Do the PCA
+  pca <- prcomp(train, center = TRUE, scale = TRUE)
+
+  # Plot the PCA
+  pca_plot <- as.data.frame(pca$x)
+  pca_plot$group <- df$RESULT
+  p <- ggplot(pca_plot,aes(x=PC1,y=PC2,color=factor(group))) + geom_point(alpha=0.8) + ggtitle(paste('PCA', title, sep=' ')) + labs(color=gene) + theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+  print(p)
+
+  
+  
+  
+  
+  
+  # Do the tSNE
+  set.seed(1) 
+  
+  tsne <- Rtsne(train, check_duplicates=FALSE, perplexity = plex) 
+  # tsne5 <- Rtsne(train, check_duplicates=FALSE, perplexity = 5)
+  #tsne50 <- Rtsne(train, check_duplicates=FALSE, perplexity = 50)
+  
+  # Plot the tSNE
+  tsne_data <- as.data.frame(tsne$Y)
+  tsne_data$class = df$RESULT
+  
+  #tsne5_data <- as.data.frame(tsne5$Y)
+  #tsne5_data$class = df$RESULT
+  
+  #tsne50_data <- as.data.frame(tsne50$Y)
+  #tsne50_data$class = df$RESULT
+  
+  
+  print(ggplot(tsne_data,aes(x=V1,y=V2,color=factor(class))) + geom_point(alpha=0.8) + ggtitle(paste('tSNE', title, sep=' ')) + labs(color=gene) + theme(panel.background = element_rect(fill = 'white', colour = 'black')))
+  
+  #print(ggplot(tsne5_data,aes(x=V1,y=V2,color=factor(class))) + geom_point(alpha=0.8) + ggtitle(paste('tSNE5', title, sep=' ')) + labs(color=gene) + theme(panel.background = element_rect(fill = 'white', colour = 'black')))
+  
+  #ggplot(tsne50_data,aes(x=V1,y=V2,color=factor(class))) + geom_point(alpha=0.8) + ggtitle(paste('tSNE50', title, sep=' ')) + labs(color=gene) + theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+  
+  
+  
+  
+  
+  # Do the UMAP
+  set.seed(18)
+  umap_result = umap(train)
+  
+  
+  # Plot the UMAP
+  umap_plot <- as.data.frame(umap_result$layout)
+  Expresion_gen = df$RESULT
+  p <- ggplot(umap_plot, aes(x = V1, y = V2, color = Expresion_gen)) + geom_point(alpha=0.8) + ggtitle(paste('UMAP', title, sep=' ')) + labs(color=gene) + theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+  print(p)
+  
+  
+    
+}
+
+```
+
+# Pintar genT
+
+```{r message= FALSE, warning=FALSE}
+
+
+
+gen='TNFRSF13B'
+plex=40
+
+
+
+###TODO
+#
+#df_TODO_HH_IMPORTANTES  = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_HH_IMPORTANTES.csv', 'TODO_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_HH_IMPORTANTES.csv', 'TODO_HH_IMPORTANTES', gen, plex)
+#
+#df_TODO_H_IMPORTANTES  = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_H_IMPORTANTES.csv', 'TODO_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_H_IMPORTANTES.csv', 'TODO_H_IMPORTANTES', gen, plex)
+
+#
+#df_TODO_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_HH_PANEL.csv', 'TODO_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_HH_PANEL.csv', 'TODO_HH_PANEL', gen, plex)
+#
+#df_TODO_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_H_PANEL.csv', 'TODO_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_H_PANEL.csv', 'TODO_H_PANEL', gen, plex)
+#
+#
+###UNICO
+#
+df_UNICO_HH_IMPORTANTES  = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_HH_IMPORTANTES.csv', 'UNICO_HH_IMPORTANTES', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_HH_IMPORTANTES.csv', 'UNICO_HH_IMPORTANTES', gen, plex)
+#
+df_UNICO_H_IMPORTANTES  = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_H_IMPORTANTES.csv', 'UNICO_H_IMPORTANTES', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_H_IMPORTANTES.csv', 'UNICO_H_IMPORTANTES', gen, plex)
+#
+df_UNICO_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_HH_PANEL.csv', 'UNICO_HH_PANEL', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_HH_PANEL.csv', 'UNICO_HH_PANEL', gen, plex)
+#
+df_UNICO_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_H_PANEL.csv', 'UNICO_H_PANEL', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_H_PANEL.csv', 'UNICO_H_PANEL', gen, plex)
+#
+#
+
+###TODO_MISS
+#
+#df_TODO_MISS_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_MISS_HH_IMPORTANTES.csv', 'TODO_MISS_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_MISS_HH_IMPORTANTES.csv', 'TODO_MISS_HH_IMPORTANTES', gen, plex)
+#
+#df_TODO_MISS_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_MISS_H_IMPORTANTES.csv', 'TODO_MISS_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_MISS_H_IMPORTANTES.csv', 'TODO_MISS_H_IMPORTANTES', gen, plex)
+#
+#df_TODO_MISS_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_MISS_HH_PANEL.csv', 'TODO_MISS_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_MISS_HH_PANEL.csv', 'TODO_MISS_HH_PANEL', gen, plex)
+#
+#df_TODO_MISS_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_MISS_H_PANEL.csv', 'TODO_MISS_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_MISS_H_PANEL.csv', 'TODO_MISS_H_PANEL', gen, plex)
+#
+#
+###UNICO_MISS
+#
+df_UNICO_MISS_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_MISS_HH_IMPORTANTES.csv', 'UNICO_MISS_HH_IMPORTANTES', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_MISS_HH_IMPORTANTES.csv', 'UNICO_MISS_HH_IMPORTANTES', gen, plex)
+#
+df_UNICO_MISS_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_MISS_H_IMPORTANTES.csv', 'UNICO_MISS_H_IMPORTANTES', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_MISS_H_IMPORTANTES.csv', 'UNICO_MISS_H_IMPORTANTES', gen, plex)
+#
+df_UNICO_MISS_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_MISS_HH_PANEL.csv', 'UNICO_MISS_HH_PANEL', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_MISS_HH_PANEL.csv', 'UNICO_MISS_HH_PANEL', gen, plex)
+#
+df_UNICO_MISS_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_MISS_H_PANEL.csv', 'UNICO_MISS_H_PANEL', plex)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_MISS_H_PANEL.csv', 'UNICO_MISS_H_PANEL', gen, plex)
+#
+#
+###TODO_POLI
+#
+#df_TODO_POLI_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_POLI_HH_IMPORTANTES.csv', 'TODO_POLI_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_POLI_HH_IMPORTANTES.csv', 'TODO_POLI_HH_IMPORTANTES', gen, plex)
+#
+#df_TODO_POLI_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_POLI_H_IMPORTANTES.csv', 'TODO_POLI_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_POLI_H_IMPORTANTES.csv', 'TODO_POLI_H_IMPORTANTES', gen, plex)
+#
+#df_TODO_POLI_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_POLI_HH_PANEL.csv', 'TODO_POLI_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_POLI_HH_PANEL.csv', 'TODO_POLI_HH_PANEL', gen, plex)
+#
+#df_TODO_POLI_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_POLI_H_PANEL.csv', 'TODO_POLI_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_POLI_H_PANEL.csv', 'TODO_POLI_H_PANEL', gen, plex)
+#
+#
+###UNICO_POLI
+#
+#df_UNICO_POLI_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_POLI_HH_IMPORTANTES.csv', 'UNICO_POLI_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_POLI_HH_IMPORTANTES.csv', 'UNICO_POLI_HH_IMPORTANTES', gen, plex)
+#
+#df_UNICO_POLI_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_POLI_H_IMPORTANTES.csv', 'UNICO_POLI_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_POLI_H_IMPORTANTES.csv', 'UNICO_POLI_H_IMPORTANTES', gen, plex)
+#
+#df_UNICO_POLI_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_POLI_HH_PANEL.csv', 'UNICO_POLI_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_POLI_HH_PANEL.csv', 'UNICO_POLI_HH_PANEL', gen, plex)
+#
+#df_UNICO_POLI_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_POLI_H_PANEL.csv', 'UNICO_POLI_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_POLI_H_PANEL.csv', 'UNICO_POLI_H_PANEL', gen, plex)
+#
+#
+###TODO_SIFT
+#
+#df_TODO_SIFT_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_SIFT_HH_IMPORTANTES.csv', 'TODO_SIFT_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_SIFT_HH_IMPORTANTES.csv', 'TODO_SIFT_HH_IMPORTANTES', gen, plex)
+#
+#df_TODO_SIFT_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_SIFT_H_IMPORTANTES.csv', 'TODO_SIFT_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_SIFT_H_IMPORTANTES.csv', 'TODO_SIFT_H_IMPORTANTES', gen, plex)
+#
+#df_TODO_SIFT_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_SIFT_HH_PANEL.csv', 'TODO_SIFT_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_SIFT_HH_PANEL.csv', 'TODO_SIFT_HH_PANEL', gen, plex)
+#
+#df_TODO_SIFT_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_SIFT_H_PANEL.csv', 'TODO_SIFT_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_SIFT_H_PANEL.csv', 'TODO_SIFT_H_PANEL', gen, plex)
+#
+#
+###UNICO_SIFT
+#
+#df_UNICO_SIFT_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_SIFT_HH_IMPORTANTES.csv', 'UNICO_SIFT_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_SIFT_HH_IMPORTANTES.csv', 'UNICO_SIFT_HH_IMPORTANTES', gen, plex)
+#
+#df_UNICO_SIFT_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_SIFT_H_IMPORTANTES.csv', 'UNICO_SIFT_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_SIFT_H_IMPORTANTES.csv', 'UNICO_SIFT_H_IMPORTANTES', gen, plex)
+#
+#df_UNICO_SIFT_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_SIFT_HH_PANEL.csv', 'UNICO_SIFT_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_SIFT_HH_PANEL.csv', 'UNICO_SIFT_HH_PANEL', gen, plex)
+#
+#df_UNICO_SIFT_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_SIFT_H_PANEL.csv', 'UNICO_SIFT_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_SIFT_H_PANEL.csv', 'UNICO_SIFT_H_PANEL', gen, plex)
+#
+
+###TODO_REVEL
+#
+#df_TODO_REVEL_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_REVEL_HH_IMPORTANTES.csv', 'TODO_REVEL_HH_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_REVEL_HH_IMPORTANTES.csv', 'TODO_REVEL_HH_IMPORTANTES', gen, plex)
+#
+#df_TODO_REVEL_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_REVEL_H_IMPORTANTES.csv', 'TODO_REVEL_H_IMPORTANTES', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_REVEL_H_IMPORTANTES.csv', 'TODO_REVEL_H_IMPORTANTES', gen, plex)
+#
+#df_TODO_REVEL_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_REVEL_HH_PANEL.csv', 'TODO_REVEL_HH_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_REVEL_HH_PANEL.csv', 'TODO_REVEL_HH_PANEL', gen, plex)
+#
+#df_TODO_REVEL_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/TODO_REVEL_H_PANEL.csv', 'TODO_REVEL_H_PANEL', plex)
+#plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/TODO_REVEL_H_PANEL.csv', 'TODO_REVEL_H_PANEL', gen, plex)
+#
+###UNICO_REVEL
+#
+df_UNICO_REVEL_HH_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_REVEL_HH_IMPORTANTES.csv', 'UNICO_REVEL_HH_IMPORTANTES', 5)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_REVEL_HH_IMPORTANTES.csv', 'UNICO_REVEL_HH_IMPORTANTES', gen, 5)
+#
+df_UNICO_REVEL_H_IMPORTANTES = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_REVEL_H_IMPORTANTES.csv', 'UNICO_REVEL_H_IMPORTANTES', 1)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_REVEL_H_IMPORTANTES.csv', 'UNICO_REVEL_H_IMPORTANTES', gen, 1)
+#
+df_UNICO_REVEL_HH_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_REVEL_HH_PANEL.csv', 'UNICO_REVEL_HH_PANEL', 10)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_REVEL_HH_PANEL.csv', 'UNICO_REVEL_HH_PANEL', gen, 10)
+#
+df_UNICO_REVEL_H_PANEL = plot_PCA_tSNE_UMAP('mis pruebas 3.0/UNICO_REVEL_H_PANEL.csv', 'UNICO_REVEL_H_PANEL', 5)
+plot_PCA_tSNE_UMAP_gene('mis pruebas 3.0/UNICO_REVEL_H_PANEL.csv', 'UNICO_REVEL_H_PANEL', gen, 5)
+
+```
+```{r message= FALSE, warning=FALSE}
+
+
+apply(train, 2, var)
+
+
+```
+
